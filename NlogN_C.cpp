@@ -9,6 +9,8 @@ void Constant_Setup();
 double *CarToSph(double XYZ[3]);
 double *SphToCar(double SPH[3]);
 double *CellCenter(int *idx, int level);
+int *NeighboursRange(int *center_idx, int center_level);
+int *NeighboursChildRange(int *center_idx, int center_level);
 
 double eps;
 int N, P, Level;
@@ -31,6 +33,8 @@ int *LToXYZ(int L, int lv);
 
 double *M_tree;
 int Tran_M_tree(int L, int lv, int n, int m);
+
+double *potential;
 
 double factorial(int n);
 double Y(int m, int n, double theta, double phi);
@@ -135,16 +139,91 @@ int main()
                     {
                         double y = Y(m, n, corr_sph[1], corr_sph[2]);
                         M_tree[Tran_M_tree(L, lv, n, m)] += particles_mass[id] * pow(corr_sph[0], n) * y;
+                        // cos(m phi) - i sin(m phi)
                     }
             }
         }
-    for (int lv = 0; lv < Level; lv++)
+    /*for (int lv = 0; lv < Level-1; lv++)
         for (int L = 0; L < Pow2[3 * lv]; L++)
             for (int n = 0; n <= P; n++)
                 for (int m = 0; m <= n; m++)
                 {
-                    printf("%d,%d,%d,%d: %f\n", lv, L, n, m, M_tree[Tran_M_tree(L, lv, n, m)]);
+                    printf("%d,%d,%d,%d: %e\n", lv, L, n, m, M_tree[Tran_M_tree(L, lv, n, m)]);
+                }*/
+
+    potential = (double *)malloc(N * sizeof(double));
+    for (int i = 0; i < N; i++)
+        potential[i] = 0;
+    for (int id = 0; id < N; id++)
+    {
+        int lv = Level - 1;
+        int *incl = NeighboursRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv);
+        for (int x = incl[0]; x <= incl[3]; x++)
+            for (int y = incl[1]; y <= incl[4]; y++)
+                for (int z = incl[2]; z <= incl[5]; z++)
+                {
+                    int L = XYZToL(x, y, z, lv);
+                    for (int i = 0; i < tree_idx_l[tree_os[lv] + L]; i++)
+                    {
+                        int id_src = tree_idx[tree_idx_os[tree_os[lv] + L] + i];
+                        if (id_src == id)
+                            continue;
+                        double *corr_src = &particles_loc[3 * id_src];
+                        double *corr = &particles_loc[3 * id];
+                        double r = 0;
+                        for (int k = 0; k < 3; k++)
+                            r += pow(corr_src[k] - corr[k], 2);
+                        r = sqrt(r);
+                        potential[id] += particles_mass[id_src] / r;
+                    }
                 }
+    }
+    for (int id = 0; id < N; id++)
+    {
+        for (int lv = 2; lv < Level; lv++)
+        {
+            int *incl = NeighboursChildRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv - 1);
+            int *excl = NeighboursRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv);
+            if(id==0)
+            {
+                printf("%d: %d,%d,%d,%d\n",lv-1,incl[0],incl[1],incl[3],incl[4]);
+                printf("%d: %d,%d,%d,%d\n",lv,excl[0],excl[1],excl[3],excl[4]);
+            }
+            for (int x = incl[0]; x <= incl[3]; x++)
+                for (int y = incl[1]; y <= incl[4]; y++)
+                    for (int z = incl[2]; z <= incl[5]; z++)
+                    {
+                        if (excl[0] <= x && excl[3] >= x && excl[1] <= y && excl[4] >= y && excl[2] <= z && excl[5] >= z)
+                            continue;
+                        int L = XYZToL(x, y, z, lv);
+                        double *center = CellCenter(LToXYZ(L, lv), lv);
+                        for (int i = 0; i < tree_idx_l[tree_os[lv] + L]; i++)
+                        {
+                            int id_src = tree_idx[tree_idx_os[tree_os[lv] + L] + i];
+                            double *corr_src = &particles_loc[3 * id_src];
+                            double *deltaX = new double[3];
+                            for (int k = 0; k < 3; k++)
+                                deltaX[k] = corr_src[k] - center[k];
+                            double *corr_sph = CarToSph(deltaX);
+                            for (int n = 0; n <= P; n++)
+                                for (int m = 0; m <= n; m++)
+                                {
+                                    double y = Y(m, n, corr_sph[1], corr_sph[2]) / pow(corr_sph[0], n + 1);
+                                    // cos(m phi) + i sin(m phi)
+                                    potential[id] += M_tree[Tran_M_tree(L, lv, n, m)] * y * (m == 0 ? 1 : 2);
+                                }
+                        }
+                    }
+        }
+    }
+
+    for (int id = 0; id < N; id++)
+    {
+        printf("%f, ",potential[id]);
+    }
+    
+
+
 
     free(particles_loc);
     free(particles_mass);
@@ -153,6 +232,8 @@ int main()
     free(tree_idx_os);
     free(tree_idx_l);
     free(tree_os);
+    free(M_tree);
+    free(potential);
 
     return EXIT_SUCCESS;
 }
@@ -205,6 +286,28 @@ double *CellCenter(int *idx, int level)
     for (int i = 0; i < 3; i++)
         center[i] = idx[i] * pow(2, -level) + pow(2, -level - 1);
     return center;
+}
+int *NeighboursRange(int *center_idx, int center_level)
+{
+    static int R[3 * 2];
+    for (int k = 0; k < 3; k++)
+    {
+        R[k] = (0 > center_idx[3 * center_level + k] - 1) ? 0 : center_idx[3 * center_level + k] - 1;
+        R[k+3] = (Pow2[center_level] - 1 < center_idx[3 * center_level + k] + 1) ? Pow2[center_level] - 1 : center_idx[3 * center_level + k] + 1;
+    }
+    return R;
+}
+int *NeighboursChildRange(int *center_idx, int center_level)
+{
+    static int R[3 * 2];
+    for (int k = 0; k < 3; k++)
+    {
+        int a = 2 * (center_idx[3 * center_level + k] - 1);
+        int b = 2 * (center_idx[3 * center_level + k] + 1) + 1;
+        R[k] = (0 > a) ? 0 : a;
+        R[k + 3] = (Pow2[center_level + 1] - 1 < b) ? Pow2[center_level + 1] - 1 : b;
+    }
+    return R;
 }
 
 int Tran_idx_pt(int id, int lv, int axis)
