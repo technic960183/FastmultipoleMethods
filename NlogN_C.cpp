@@ -8,6 +8,7 @@ void Constant_Setup();
 
 double *CarToSph(double XYZ[3]);
 double *SphToCar(double SPH[3]);
+double *CellCenter(int *idx, int level);
 
 double eps;
 int N, P, Level;
@@ -26,7 +27,13 @@ int *tree_idx_os;
 int *tree_idx_l;
 int XYZToL(int x, int y, int z, int lv);
 int XYZToL(int *idx, int lv);
-int Tran_tree_idx();
+int *LToXYZ(int L, int lv);
+
+double *M_tree;
+int Tran_M_tree(int L, int lv, int n, int m);
+
+double factorial(int n);
+double Y(int m, int n, double theta, double phi);
 
 int main()
 {
@@ -70,9 +77,6 @@ int main()
         }
     }
 
-    // for (int i = 0; i < N; i++)
-    //     printf("%d, %d, %d\n", particles_idx[i * 3 * Level + 6], particles_idx[i * 3 * Level + 9], particles_idx[i * 3 * Level + 12]);
-
     // Offset of the tree layer
     tree_os = (int *)malloc(Level * sizeof(int));
     tree_os[0] = 0;
@@ -104,12 +108,6 @@ int main()
             int *idx = &particles_idx[Tran_idx_pt(id, lv, 0)]; // ?? particles_idx + Tran_idx_pt(id, lv, 0) ??
             int offset_layer = tree_os[lv] + XYZToL(idx, lv);
             int offset_tree = tree_idx_os[offset_layer];
-            if (lv == 1 && id == 2)
-            {
-                printf("%d %d %d \n", idx[0], idx[1], idx[2]);
-                printf("%d \n", offset_layer);
-                printf("%d \n", offset_tree);
-            }
             for (int i = 0; i < tree_idx_l[offset_layer]; i++)
                 if (tree_idx[offset_tree + i] == -1)
                 {
@@ -118,11 +116,35 @@ int main()
                 }
         }
 
-    for (int i = 0; i < N * Level; i++)
-    {
-        if (tree_idx[i] == -1)
-            printf("Q");
-    }
+    // M_tree
+    M_tree = (double *)malloc((Pow2[3 * Level] - 1) / (8 - 1) * (P + 1) * (P + 2) / 2 * sizeof(double));
+    for (int lv = 0; lv < Level; lv++)
+        for (int L = 0; L < Pow2[3 * lv]; L++)
+        {
+            double *center = CellCenter(LToXYZ(L, lv), lv);
+            for (int i = 0; i < tree_idx_l[tree_os[lv] + L]; i++)
+            {
+                int id = tree_idx[tree_idx_os[tree_os[lv] + L] + i];
+                double *corr = &particles_loc[3 * id];
+                double *deltaX = new double[3];
+                for (int k = 0; k < 3; k++)
+                    deltaX[k] = corr[k] - center[k];
+                double *corr_sph = CarToSph(deltaX);
+                for (int n = 0; n <= P; n++)
+                    for (int m = 0; m <= n; m++)
+                    {
+                        double y = Y(m, n, corr_sph[1], corr_sph[2]);
+                        M_tree[Tran_M_tree(L, lv, n, m)] += particles_mass[id] * pow(corr_sph[0], n) * y;
+                    }
+            }
+        }
+    for (int lv = 0; lv < Level; lv++)
+        for (int L = 0; L < Pow2[3 * lv]; L++)
+            for (int n = 0; n <= P; n++)
+                for (int m = 0; m <= n; m++)
+                {
+                    printf("%d,%d,%d,%d: %f\n", lv, L, n, m, M_tree[Tran_M_tree(L, lv, n, m)]);
+                }
 
     free(particles_loc);
     free(particles_mass);
@@ -157,7 +179,7 @@ double *CarToSph(double XYZ[3])
     static double sph[3];
     double r = sqrt(pow(x, 2) + pow(y, 2) + pow(z, 2));
     double theta = acos(z / r);
-    double phi = atan(y / x);
+    double phi = atan2(y, x);
     sph[0] = r;
     sph[1] = theta;
     sph[2] = phi;
@@ -177,6 +199,13 @@ double *SphToCar(double SPH[3])
     car[2] = z;
     return car;
 }
+double *CellCenter(int *idx, int level)
+{
+    static double center[3];
+    for (int i = 0; i < 3; i++)
+        center[i] = idx[i] * pow(2, -level) + pow(2, -level - 1);
+    return center;
+}
 
 int Tran_idx_pt(int id, int lv, int axis)
 {
@@ -190,6 +219,32 @@ int XYZToL(int x, int y, int z, int lv)
 int XYZToL(int *idx, int lv)
 {
     return idx[2] * Pow2[lv] * Pow2[lv] + idx[1] * Pow2[lv] + idx[0];
+}
+int *LToXYZ(int L, int lv)
+{
+    static int XYZ[3];
+    XYZ[2] = L / Pow2[2 * lv];
+    XYZ[1] = (L - XYZ[2] * Pow2[2 * lv]) / Pow2[lv];
+    XYZ[0] = (L - XYZ[2] * Pow2[2 * lv]) % Pow2[lv];
+    return XYZ;
+}
+
+int Tran_M_tree(int L, int lv, int n, int m)
+{
+    return ((tree_os[lv] + L) * (P + 1) * (P + 2) / 2) + n * (n + 1) / 2 + m;
+}
+
+double factorial(int n)
+{
+    double result = 1.;
+    for (int i = 1; i < n + 1; i++)
+        result *= i;
+    return result;
+}
+double Y(int m, int n, double theta, double phi)
+{
+    double output = sqrt(factorial(n - abs(m)) / factorial(n + abs(m))) * pow(-1, m);
+    return output * std::assoc_legendre(n, abs(m), cos(theta));
 }
 
 /*
