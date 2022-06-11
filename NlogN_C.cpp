@@ -2,7 +2,6 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
 
 void Constant_Setup();
 
@@ -280,6 +279,7 @@ double *SphToCar(double SPH[3])
     car[2] = z;
     return car;
 }
+
 double *CellCenter(int *idx, int level)
 {
     static double center[3];
@@ -309,7 +309,6 @@ int *NeighboursChildRange(int *center_idx, int center_level)
     }
     return R;
 }
-
 int Tran_idx_pt(int id, int lv, int axis)
 {
     return (id * Level + lv) * 3 + axis;
