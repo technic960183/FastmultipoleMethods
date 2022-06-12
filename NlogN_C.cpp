@@ -2,6 +2,7 @@
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 void Constant_Setup();
 
@@ -30,13 +31,19 @@ int XYZToL(int x, int y, int z, int lv);
 int XYZToL(int *idx, int lv);
 int *LToXYZ(int L, int lv);
 
-double *M_tree;
+double *M_tree_re;
+double *M_tree_im;
 int Tran_M_tree(int L, int lv, int n, int m);
+
+double *A_coeff;
+double *P_coeff;
+int Tran_Acoeff(int n, int m);
+int Tran_Pcoeff(int n, int m);
 
 double *potential;
 
-double factorial(int n);
-double Y(int m, int n, double theta, double phi);
+// double factorial(int n);
+double AP(int n, int m, double theta);
 
 int main()
 {
@@ -120,7 +127,9 @@ int main()
         }
 
     // M_tree
-    M_tree = (double *)malloc((Pow2[3 * Level] - 1) / (8 - 1) * (P + 1) * (P + 2) / 2 * sizeof(double));
+    M_tree_re = (double *)malloc((Pow2[3 * Level] - 1) / (8 - 1) * (P + 1) * (P + 2) / 2 * sizeof(double));
+    M_tree_im = (double *)malloc((Pow2[3 * Level] - 1) / (8 - 1) * (P + 1) * (P + 2) / 2 * sizeof(double));
+
     for (int lv = 0; lv < Level; lv++)
         for (int L = 0; L < Pow2[3 * lv]; L++)
         {
@@ -133,12 +142,14 @@ int main()
                 for (int k = 0; k < 3; k++)
                     deltaX[k] = corr[k] - center[k];
                 double *corr_sph = CarToSph(deltaX);
+                delete[] deltaX;
                 for (int n = 0; n <= P; n++)
                     for (int m = 0; m <= n; m++)
                     {
-                        double y = Y(m, n, corr_sph[1], corr_sph[2]);
-                        M_tree[Tran_M_tree(L, lv, n, m)] += particles_mass[id] * pow(corr_sph[0], n) * y;
+                        double qrhoAP = particles_mass[id] * pow(corr_sph[0], n) * AP(m, n, corr_sph[1]);
                         // cos(m phi) - i sin(m phi)
+                        M_tree_re[Tran_M_tree(L, lv, n, m)] += qrhoAP * cos(m * corr_sph[2]);
+                        M_tree_im[Tran_M_tree(L, lv, n, m)] -= qrhoAP * sin(m * corr_sph[2]);
                     }
             }
         }
@@ -153,7 +164,8 @@ int main()
     potential = (double *)malloc(N * sizeof(double));
     for (int i = 0; i < N; i++)
         potential[i] = 0;
-    for (int id = 0; id < N; id++)
+    bool Direct = false;
+    for (int id = 0; id < N; id++) // Direct evaluate
     {
         int lv = Level - 1;
         int *incl = NeighboursRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv);
@@ -174,19 +186,31 @@ int main()
                             r += pow(corr_src[k] - corr[k], 2);
                         r = sqrt(r);
                         potential[id] += particles_mass[id_src] / r;
+                        Direct = true;
                     }
                 }
     }
+    for (int id = 0; id < N; id++)
+    {
+        if (potential[id] < 0)
+            printf("AAAAAA\n");
+    }
+
+    for (int id = 0; id < 50; id++)
+    {
+        printf("%.3e, ", potential[id]);
+    }
+    printf("Have direct: %d\n", Direct ? 1 : 0);
     for (int id = 0; id < N; id++)
     {
         for (int lv = 2; lv < Level; lv++)
         {
             int *incl = NeighboursChildRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv - 1);
             int *excl = NeighboursRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv);
-            if(id==0)
+            if (id == 0)
             {
-                printf("%d: %d,%d,%d,%d\n",lv-1,incl[0],incl[1],incl[3],incl[4]);
-                printf("%d: %d,%d,%d,%d\n",lv,excl[0],excl[1],excl[3],excl[4]);
+                printf("%d: %d,%d,%d,%d\n", lv - 1, incl[0], incl[1], incl[3], incl[4]);
+                printf("%d: %d,%d,%d,%d\n", lv, excl[0], excl[1], excl[3], excl[4]);
             }
             for (int x = incl[0]; x <= incl[3]; x++)
                 for (int y = incl[1]; y <= incl[4]; y++)
@@ -204,25 +228,19 @@ int main()
                             for (int k = 0; k < 3; k++)
                                 deltaX[k] = corr_src[k] - center[k];
                             double *corr_sph = CarToSph(deltaX);
+                            delete[] deltaX;
                             for (int n = 0; n <= P; n++)
                                 for (int m = 0; m <= n; m++)
                                 {
-                                    double y = Y(m, n, corr_sph[1], corr_sph[2]) / pow(corr_sph[0], n + 1);
+                                    double rAP = (m == 0 ? 1 : 2) * AP(m, n, corr_sph[1]) / pow(corr_sph[0], n + 1);
                                     // cos(m phi) + i sin(m phi)
-                                    potential[id] += M_tree[Tran_M_tree(L, lv, n, m)] * y * (m == 0 ? 1 : 2);
+                                    potential[id] += rAP * M_tree_re[Tran_M_tree(L, lv, n, m)] * cos(m * corr_sph[2]);
+                                    potential[id] -= rAP * M_tree_im[Tran_M_tree(L, lv, n, m)] * sin(m * corr_sph[2]);
                                 }
                         }
                     }
         }
     }
-
-    for (int id = 0; id < N; id++)
-    {
-        printf("%f, ",potential[id]);
-    }
-    
-
-
 
     free(particles_loc);
     free(particles_mass);
@@ -231,7 +249,8 @@ int main()
     free(tree_idx_os);
     free(tree_idx_l);
     free(tree_os);
-    free(M_tree);
+    free(M_tree_re);
+    free(M_tree_im);
     free(potential);
 
     return EXIT_SUCCESS;
@@ -242,13 +261,32 @@ void Constant_Setup()
     N = 1000; // Number of particles
     eps = pow(10, -2);
     P = ceil(-log(eps) / log(pow(3, 0.5)));
-    Level = 5; // ceil(log2(N) / 3) + 1;
+    Level = ceil(log2(N) / 3) + 1;
     printf("Grid level: %d\n", Level - 1);
 
     Pow2 = new int[3 * Level + 1];
     Pow2[0] = 1;
     for (int i = 1; i < 3 * Level + 1; i++)
         Pow2[i] = Pow2[i - 1] * 2;
+
+    FILE *fp;
+    int A_coeff_count = Tran_Acoeff(40, 0);
+    A_coeff = new double[A_coeff_count];
+    fp = fopen("./Spherical_Harmonics_COE.bin", "rb");
+    fread(A_coeff, sizeof(double), A_coeff_count, fp);
+
+    int P_coeff_count = Tran_Pcoeff(40, 0);
+    P_coeff = new double[P_coeff_count];
+    fp = fopen("./Associated_Legendre_COE.bin", "rb");
+    fread(P_coeff, sizeof(double), P_coeff_count, fp);
+    /*for (int n = 0; n < 5; n++)
+        for (int m = 0; m < n + 1; m++)
+        {
+            printf("(%d,%d) %e", n, m, A_coeff[Tran_Acoeff(n, m)]);
+            // for (int i = 0; i < n + 1 - m; i++)
+            //     printf("%f, ", P_coeff[Tran_Pcoeff(n, m) + i]);
+            printf("\n");
+        }*/
 }
 
 double *CarToSph(double XYZ[3])
@@ -293,7 +331,7 @@ int *NeighboursRange(int *center_idx, int center_level)
     for (int k = 0; k < 3; k++)
     {
         R[k] = (0 > center_idx[3 * center_level + k] - 1) ? 0 : center_idx[3 * center_level + k] - 1;
-        R[k+3] = (Pow2[center_level] - 1 < center_idx[3 * center_level + k] + 1) ? Pow2[center_level] - 1 : center_idx[3 * center_level + k] + 1;
+        R[k + 3] = (Pow2[center_level] - 1 < center_idx[3 * center_level + k] + 1) ? Pow2[center_level] - 1 : center_idx[3 * center_level + k] + 1;
     }
     return R;
 }
@@ -336,17 +374,29 @@ int Tran_M_tree(int L, int lv, int n, int m)
     return ((tree_os[lv] + L) * (P + 1) * (P + 2) / 2) + n * (n + 1) / 2 + m;
 }
 
-double factorial(int n)
+int Tran_Pcoeff(int n, int m)
+{
+    return n * (n + 1) * (n + 2) / 6 + m * (n + 2) - m * (m + 1) / 2;
+}
+int Tran_Acoeff(int n, int m)
+{
+    return n * (n + 1) / 2 + m;
+}
+
+/*double factorial(int n)
 {
     double result = 1.;
     for (int i = 1; i < n + 1; i++)
         result *= i;
     return result;
-}
-double Y(int m, int n, double theta, double phi)
+}*/
+double AP(int n, int m, double theta)
 {
-    double output = sqrt(factorial(n - abs(m)) / factorial(n + abs(m))) * pow(-1, m);
-    return output * std::assoc_legendre(n, abs(m), cos(theta));
+    double SIN_M = (m == 0) ? 1.0 : pow(sin(theta), m);
+    double p = 0;
+    for (int i = 0; i < n + 1 - m; i++)
+        p += P_coeff[Tran_Pcoeff(n, m) + i] * pow(cos(theta), i) * SIN_M;
+    return A_coeff[Tran_Acoeff(n, m)] * p;
 }
 
 /*
