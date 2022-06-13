@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+#define DEBUGMODE true
+
 void Constant_Setup();
 
 double *CarToSph(double XYZ[3]);
@@ -49,6 +51,7 @@ int main()
 {
     printf("Start.\n");
     Constant_Setup();
+    FILE *fp = fopen("log", "w");
 
     // produce particle list
     srand(time(NULL));
@@ -61,6 +64,11 @@ int main()
         for (int j = 0; j < 3; j++)
             particles_loc[particle_id + j] = ((double)rand() / (RAND_MAX));
         particles_mass[i] = ((double)rand() / (RAND_MAX));
+    }
+    if (DEBUGMODE)
+    {
+        fprintf(fp, "loc: %f, %f, %f\n", particles_loc[0], particles_loc[1], particles_loc[2]);
+        fprintf(fp, "mass: %f\n", particles_mass[0]);
     }
 
     // idx_particle
@@ -85,6 +93,12 @@ int main()
             res_y = 2 * res_y - split_y;
             res_z = 2 * res_z - split_z;
         }
+    }
+
+    if (DEBUGMODE)
+    {
+        for (int lv = 0; lv < Level; lv++)
+            fprintf(fp, "lv %d: (%d,%d,%d)\n", lv, particles_idx[Tran_idx_pt(0, lv, 0)], particles_idx[Tran_idx_pt(0, lv, 1)], particles_idx[Tran_idx_pt(0, lv, 2)]);
     }
 
     // Offset of the tree layer
@@ -153,13 +167,16 @@ int main()
                     }
             }
         }
-    /*for (int lv = 0; lv < Level-1; lv++)
-        for (int L = 0; L < Pow2[3 * lv]; L++)
+
+    if (DEBUGMODE)
+    {
+        for (int lv = 0; lv < Level - 1; lv++)
             for (int n = 0; n <= P; n++)
                 for (int m = 0; m <= n; m++)
                 {
-                    printf("%d,%d,%d,%d: %e\n", lv, L, n, m, M_tree[Tran_M_tree(L, lv, n, m)]);
-                }*/
+                    fprintf(fp, "%d,%d,%d,%d: %e +i %e\n", lv, 0, n, m, M_tree_re[Tran_M_tree(0, lv, n, m)], M_tree_im[Tran_M_tree(0, lv, n, m)]);
+                }
+    }
 
     potential = (double *)malloc(N * sizeof(double));
     for (int i = 0; i < N; i++)
@@ -190,16 +207,7 @@ int main()
                     }
                 }
     }
-    for (int id = 0; id < N; id++)
-    {
-        if (potential[id] < 0)
-            printf("AAAAAA\n");
-    }
 
-    for (int id = 0; id < 50; id++)
-    {
-        printf("%.3e, ", potential[id]);
-    }
     printf("Have direct: %d\n", Direct ? 1 : 0);
     for (int id = 0; id < N; id++)
     {
@@ -207,11 +215,11 @@ int main()
         {
             int *incl = NeighboursChildRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv - 1);
             int *excl = NeighboursRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv);
-            if (id == 0)
+            /*if (id == 0)
             {
                 printf("%d: %d,%d,%d,%d\n", lv - 1, incl[0], incl[1], incl[3], incl[4]);
                 printf("%d: %d,%d,%d,%d\n", lv, excl[0], excl[1], excl[3], excl[4]);
-            }
+            }*/
             for (int x = incl[0]; x <= incl[3]; x++)
                 for (int y = incl[1]; y <= incl[4]; y++)
                     for (int z = incl[2]; z <= incl[5]; z++)
@@ -236,10 +244,19 @@ int main()
                                     // cos(m phi) + i sin(m phi)
                                     potential[id] += rAP * M_tree_re[Tran_M_tree(L, lv, n, m)] * cos(m * corr_sph[2]);
                                     potential[id] -= rAP * M_tree_im[Tran_M_tree(L, lv, n, m)] * sin(m * corr_sph[2]);
+                                    if (DEBUGMODE && id == 0 && L == 0)
+                                    {
+                                        fprintf(fp, "%d,%d,%d,%d: %e +i %e\n", lv, L, n, m, M_tree_re[Tran_M_tree(L, lv, n, m)], M_tree_im[Tran_M_tree(L, lv, n, m)]);
+                                    }
                                 }
                         }
                     }
         }
+    }
+
+    for (int id = 0; id < 50; id++)
+    {
+        printf("%.3e, ", potential[id]);
     }
 
     free(particles_loc);
@@ -261,7 +278,8 @@ void Constant_Setup()
     N = 1000; // Number of particles
     eps = pow(10, -2);
     P = ceil(-log(eps) / log(pow(3, 0.5)));
-    Level = ceil(log2(N) / 3) + 1;
+    Level = 6;
+    // ceil(log2(N) / 3) + 1;
     printf("Grid level: %d\n", Level - 1);
 
     Pow2 = new int[3 * Level + 1];
