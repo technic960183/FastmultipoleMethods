@@ -6,6 +6,8 @@
 
 #define DEBUGMODE false
 
+#define COMPARE_TO_DIRECT false
+
 void Constant_Setup();
 
 double *CarToSph(double XYZ[3]);
@@ -216,11 +218,6 @@ int main()
         {
             int *incl = NeighboursChildRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv - 1);
             int *excl = NeighboursRange(&particles_idx[Tran_idx_pt(id, 0, 0)], lv);
-            /*if (id == 0)
-            {
-                printf("%d: %d,%d,%d,%d\n", lv - 1, incl[0], incl[1], incl[3], incl[4]);
-                printf("%d: %d,%d,%d,%d\n", lv, excl[0], excl[1], excl[3], excl[4]);
-            }*/
             for (int x = incl[0]; x <= incl[3]; x++)
                 for (int y = incl[1]; y <= incl[4]; y++)
                     for (int z = incl[2]; z <= incl[5]; z++)
@@ -229,6 +226,11 @@ int main()
                             continue;
                         int L = XYZToL(x, y, z, lv);
                         double *center = CellCenter(LToXYZ(L, lv), lv);
+                        // ***********************************************
+                        // ***********************************************
+                        // ** How come I don't see this big bug below?? **
+                        // ***********************************************
+                        // ***********************************************
                         // for (int i = 0; i < tree_idx_l[tree_os[lv] + L]; i++)
                         //{
                         // int id_src = tree_idx[tree_idx_os[tree_os[lv] + L] + i];
@@ -257,23 +259,23 @@ int main()
     }
 
     potential_direct = (double *)malloc(N * sizeof(double));
-    for (int i = 0; i < N; i++)
-        potential_direct[i] = 0;
-    for (int id_1 = 0; id_1 < N; id_1++)
-        for (int id_2 = 0; id_2 < N; id_2++)
-        {
-            if (id_1 == id_2)
-                continue;
-            double r = 0;
-            for (int k = 0; k < 3; k++)
-                r += pow(particles_loc[3 * id_1 + k] - particles_loc[3 * id_2 + k], 2);
-            r = sqrt(r);
-            potential_direct[id_1] += particles_mass[id_2] / r;
-        }
-
-    for (int id = 0; id < 50; id++)
+    if (COMPARE_TO_DIRECT)
     {
-        printf("id=%d, phi= %.5e, %.5e\n", id, potential[id], potential_direct[id]);
+        for (int i = 0; i < N; i++)
+            potential_direct[i] = 0;
+        for (int id_1 = 0; id_1 < N; id_1++)
+            for (int id_2 = 0; id_2 < N; id_2++)
+            {
+                if (id_1 == id_2)
+                    continue;
+                double r = 0;
+                for (int k = 0; k < 3; k++)
+                    r += pow(particles_loc[3 * id_1 + k] - particles_loc[3 * id_2 + k], 2);
+                r = sqrt(r);
+                potential_direct[id_1] += particles_mass[id_2] / r;
+            }
+        for (int id = 0; id < 50; id++)
+            printf("id=%d, phi= %.5e, %.5e\n", id, potential[id], potential_direct[id]);
     }
 
     free(particles_loc);
@@ -293,11 +295,10 @@ int main()
 
 void Constant_Setup()
 {
-    N = 1000; // Number of particles
-    eps = pow(10, -2);
+    N = 1000;          // Number of particles
+    eps = pow(10, -2); // accuracy
     P = ceil(-log(eps) / log(pow(3, 0.5)));
-    Level = 6;
-    // ceil(log2(N) / 3) + 1;
+    Level = ceil(log2(N) / 3) + 1; // Level of grid
     printf("Grid level: %d\n", Level - 1);
 
     Pow2 = new int[3 * Level + 1];
@@ -315,14 +316,6 @@ void Constant_Setup()
     P_coeff = new double[P_coeff_count];
     fp = fopen("./Associated_Legendre_COE.bin", "rb");
     fread(P_coeff, sizeof(double), P_coeff_count, fp);
-    /*for (int n = 0; n < 5; n++)
-        for (int m = 0; m < n + 1; m++)
-        {
-            printf("(%d,%d) %e", n, m, A_coeff[Tran_Acoeff(n, m)]);
-            // for (int i = 0; i < n + 1 - m; i++)
-            //     printf("%f, ", P_coeff[Tran_Pcoeff(n, m) + i]);
-            printf("\n");
-        }*/
 }
 
 double *CarToSph(double XYZ[3])
@@ -419,13 +412,6 @@ int Tran_Acoeff(int n, int m)
     return n * (n + 1) / 2 + m;
 }
 
-/*double factorial(int n)
-{
-    double result = 1.;
-    for (int i = 1; i < n + 1; i++)
-        result *= i;
-    return result;
-}*/
 double AP(int n, int m, double theta)
 {
     double SIN_M = (m == 0) ? 1.0 : pow(sin(theta), m);
