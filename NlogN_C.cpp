@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#define DEBUGMODE true
+#define DEBUGMODE false
 
 void Constant_Setup();
 
@@ -43,6 +43,7 @@ int Tran_Acoeff(int n, int m);
 int Tran_Pcoeff(int n, int m);
 
 double *potential;
+double *potential_direct;
 
 // double factorial(int n);
 double AP(int n, int m, double theta);
@@ -228,35 +229,51 @@ int main()
                             continue;
                         int L = XYZToL(x, y, z, lv);
                         double *center = CellCenter(LToXYZ(L, lv), lv);
-                        for (int i = 0; i < tree_idx_l[tree_os[lv] + L]; i++)
-                        {
-                            int id_src = tree_idx[tree_idx_os[tree_os[lv] + L] + i];
-                            double *corr_src = &particles_loc[3 * id_src];
-                            double *deltaX = new double[3];
-                            for (int k = 0; k < 3; k++)
-                                deltaX[k] = corr_src[k] - center[k];
-                            double *corr_sph = CarToSph(deltaX);
-                            delete[] deltaX;
-                            for (int n = 0; n <= P; n++)
-                                for (int m = 0; m <= n; m++)
+                        // for (int i = 0; i < tree_idx_l[tree_os[lv] + L]; i++)
+                        //{
+                        // int id_src = tree_idx[tree_idx_os[tree_os[lv] + L] + i];
+                        // double *corr_src = &particles_loc[3 * id_src];
+                        double *corr_src = &particles_loc[3 * id];
+                        double *deltaX = new double[3];
+                        for (int k = 0; k < 3; k++)
+                            deltaX[k] = corr_src[k] - center[k];
+                        double *corr_sph = CarToSph(deltaX);
+                        delete[] deltaX;
+                        for (int n = 0; n <= P; n++)
+                            for (int m = 0; m <= n; m++)
+                            {
+                                double rAP = (m == 0 ? 1 : 2) * AP(m, n, corr_sph[1]) / pow(corr_sph[0], n + 1);
+                                // cos(m phi) + i sin(m phi)
+                                potential[id] += rAP * M_tree_re[Tran_M_tree(L, lv, n, m)] * cos(m * corr_sph[2]);
+                                potential[id] -= rAP * M_tree_im[Tran_M_tree(L, lv, n, m)] * sin(m * corr_sph[2]);
+                                if (DEBUGMODE && id == 0 && L == 0)
                                 {
-                                    double rAP = (m == 0 ? 1 : 2) * AP(m, n, corr_sph[1]) / pow(corr_sph[0], n + 1);
-                                    // cos(m phi) + i sin(m phi)
-                                    potential[id] += rAP * M_tree_re[Tran_M_tree(L, lv, n, m)] * cos(m * corr_sph[2]);
-                                    potential[id] -= rAP * M_tree_im[Tran_M_tree(L, lv, n, m)] * sin(m * corr_sph[2]);
-                                    if (DEBUGMODE && id == 0 && L == 0)
-                                    {
-                                        fprintf(fp, "%d,%d,%d,%d: %e +i %e\n", lv, L, n, m, M_tree_re[Tran_M_tree(L, lv, n, m)], M_tree_im[Tran_M_tree(L, lv, n, m)]);
-                                    }
+                                    fprintf(fp, "%d,%d,%d,%d: %e +i %e\n", lv, L, n, m, M_tree_re[Tran_M_tree(L, lv, n, m)], M_tree_im[Tran_M_tree(L, lv, n, m)]);
                                 }
-                        }
+                            }
+                        //}
                     }
         }
     }
 
+    potential_direct = (double *)malloc(N * sizeof(double));
+    for (int i = 0; i < N; i++)
+        potential_direct[i] = 0;
+    for (int id_1 = 0; id_1 < N; id_1++)
+        for (int id_2 = 0; id_2 < N; id_2++)
+        {
+            if (id_1 == id_2)
+                continue;
+            double r = 0;
+            for (int k = 0; k < 3; k++)
+                r += pow(particles_loc[3 * id_1 + k] - particles_loc[3 * id_2 + k], 2);
+            r = sqrt(r);
+            potential_direct[id_1] += particles_mass[id_2] / r;
+        }
+
     for (int id = 0; id < 50; id++)
     {
-        printf("%.3e, ", potential[id]);
+        printf("id=%d, phi= %.5e, %.5e\n", id, potential[id], potential_direct[id]);
     }
 
     free(particles_loc);
@@ -269,6 +286,7 @@ int main()
     free(M_tree_re);
     free(M_tree_im);
     free(potential);
+    free(potential_direct);
 
     return EXIT_SUCCESS;
 }
