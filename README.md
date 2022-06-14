@@ -11,7 +11,7 @@ The main code: FMM.cpp
 The parallelized version:FMM_parallel.cpp
 
 Note:   
-In order to improve the performance of our code, we deal with the spherical harmonic coefficient, which is the core of the potential calculation, by reading the pre-calculated binary data file "Spherical_Harmonics_COE.bin" and "Associated_Legendre_COE.bin" rather than keep calling the existed function std::assoc_legendre in C++17. As a result, to run the code successfully, it's necessary to have this file in same directory. All these pre-calculated files are provided by Legendre_poly_generator.ipynb, you are free to check it for detail if you like.    
+In order to improve the performance of our code, we deal with the spherical harmonic coefficient, which is the core of the potential calculation, by reading the pre-calculated binary data file "Spherical_Harmonics_COE.bin" and "Associated_Legendre_COE.bin" rather than keep calling the existed function std::assoc_legendre in C++17. As a result, to run the code successfully, it's necessary to have this file in same directory. All these pre-calculated files are provided by Legendre_poly_generator.ipynb, feel free to check it for detail if you like.    
 
 Some output results of our code:   
 
