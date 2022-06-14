@@ -11,7 +11,7 @@ The main code: FMM.cpp
 The parallelized version:FMM_parallel.cpp
 
 Total time_consumed v.s. Number of Threads (with N=2000)
-![Image text](https://github.com/technic960183/FastmultipoleMethods/blob/main/Figure/T_N_thr.png)
+![Image text](https://github.com/technic960183/FastmultipoleMethods/blob/main/Figure/T_N_thr.png)    
 FIG.1   
 In FIG.1, we can observe that the total time consumed is aroud twice faster when the number of threads is double. This figure shows that the parallelism of this code(FMM_parallel.cpp) works well and can really reduce the total calcuating time. The value of evaluation is confirmed to be matched with the one calculated by direct N body, you may also check it by yourself through turning on the function by making the line 10 #define COMPARE_TO_DIRECT false to be true, which will print fifty particles' data (in both FMM and direct N).   
 Perfomance Comparison (Without doing parallel)
