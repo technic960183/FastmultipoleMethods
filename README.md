@@ -1,6 +1,9 @@
 # FastmultipoleMethods
 The fast multipole methods with N-body self gravity
 
+Brief Description about the FMM and our work:
+In order to solve the potential problem in a more efficient way (rather than Direct N body), FMM takes the advantages of tree structure (with same amazing mathematical tricks of spherical harmonic) that reduce the time complexity from $O(N^2)$ to $O(N)$. Our work mainly focuses on building up the program to implement the FMM on the problem of gravitational potential (which can easily extend to electronstatic). At final, we provided the code of FMM for potential problem with \textbf{High Accuracy} and \textbf{about O(N) scaling} which will make it become faster when the number of particles is large.
+
 The bonus point we done:
 - We have extend the code into 3D !
 
